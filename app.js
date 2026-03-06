@@ -92,15 +92,6 @@ function renderPlayerList() {
 
     ul.appendChild(li);
   });
-
-  // Remove buttons
-  ul.querySelectorAll('.player-remove').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.index);
-      state.players.splice(idx, 1);
-      renderPlayerList();
-    });
-  });
 }
 
 function addPlayer(name) {
@@ -152,7 +143,7 @@ function onDrop(e) {
 
 function onDragEnd(e) {
   e.currentTarget.classList.remove('dragging');
-  document.querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
+  $('player-list').querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
   state.dragSrcIndex = null;
 }
 
@@ -160,22 +151,20 @@ function onDragEnd(e) {
    TOUCH DRAG — iOS
    ===================================================== */
 
-let touchDragSrc = null;
-let touchDragClone = null;
-let touchStartY = 0;
-let touchStartIndex = 0;
+const touchDrag = { src: null, clone: null, startY: 0, startIndex: 0 };
 
 function onTouchStart(e) {
-  touchDragSrc = e.currentTarget;
-  touchStartIndex = parseInt(touchDragSrc.dataset.index);
-  touchStartY = e.touches[0].clientY;
+  touchDrag.src = e.currentTarget;
+  touchDrag.startIndex = parseInt(touchDrag.src.dataset.index);
+  touchDrag.startY = e.touches[0].clientY;
 
-  touchDragClone = touchDragSrc.cloneNode(true);
-  touchDragClone.style.cssText = `
+  const rect = touchDrag.src.getBoundingClientRect();
+  touchDrag.clone = touchDrag.src.cloneNode(true);
+  touchDrag.clone.style.cssText = `
     position: fixed;
-    left: ${touchDragSrc.getBoundingClientRect().left}px;
-    top: ${touchDragSrc.getBoundingClientRect().top}px;
-    width: ${touchDragSrc.offsetWidth}px;
+    left: ${rect.left}px;
+    top: ${rect.top}px;
+    width: ${touchDrag.src.offsetWidth}px;
     opacity: 0.85;
     pointer-events: none;
     z-index: 9999;
@@ -183,47 +172,47 @@ function onTouchStart(e) {
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     transition: none;
   `;
-  document.body.appendChild(touchDragClone);
-  touchDragSrc.style.opacity = '0.3';
+  document.body.appendChild(touchDrag.clone);
+  touchDrag.src.style.opacity = '0.3';
 }
 
 function onTouchMove(e) {
-  if (!touchDragClone) return;
+  if (!touchDrag.clone) return;
   e.preventDefault();
   const touch = e.touches[0];
-  const dy = touch.clientY - touchStartY;
-  touchDragClone.style.transform = `translateY(${dy}px)`;
+  const dy = touch.clientY - touchDrag.startY;
+  touchDrag.clone.style.transform = `translateY(${dy}px)`;
 
   // Find element under touch
-  touchDragClone.style.display = 'none';
+  touchDrag.clone.style.display = 'none';
   const el = document.elementFromPoint(touch.clientX, touch.clientY);
-  touchDragClone.style.display = '';
+  touchDrag.clone.style.display = '';
   const item = el ? el.closest('.player-item') : null;
-  document.querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
-  if (item && item !== touchDragSrc) {
+  $('player-list').querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
+  if (item && item !== touchDrag.src) {
     item.classList.add('drag-over');
   }
 }
 
 function onTouchEnd(e) {
-  if (!touchDragClone) return;
+  if (!touchDrag.clone) return;
   const touch = e.changedTouches[0];
-  touchDragClone.style.display = 'none';
+  touchDrag.clone.style.display = 'none';
   const el = document.elementFromPoint(touch.clientX, touch.clientY);
-  touchDragClone.style.display = '';
+  touchDrag.clone.style.display = '';
 
   const item = el ? el.closest('.player-item') : null;
-  if (item && item !== touchDragSrc) {
+  if (item && item !== touchDrag.src) {
     const targetIndex = parseInt(item.dataset.index);
-    const moved = state.players.splice(touchStartIndex, 1)[0];
+    const moved = state.players.splice(touchDrag.startIndex, 1)[0];
     state.players.splice(targetIndex, 0, moved);
   }
 
-  touchDragClone.remove();
-  touchDragClone = null;
-  if (touchDragSrc) touchDragSrc.style.opacity = '';
-  touchDragSrc = null;
-  document.querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
+  touchDrag.clone.remove();
+  touchDrag.clone = null;
+  if (touchDrag.src) touchDrag.src.style.opacity = '';
+  touchDrag.src = null;
+  $('player-list').querySelectorAll('.player-item').forEach(li => li.classList.remove('drag-over'));
   renderPlayerList();
 }
 
@@ -338,14 +327,6 @@ function propagateSingleElim(t) {
       const slot = m % 2 === 0 ? 'p1' : 'p2';
       if (match.winner) {
         next[nextMatchIdx][slot] = match.winner;
-        // Auto-advance if both slots filled and one is null (bye)
-        if (next[nextMatchIdx].p1 !== null && next[nextMatchIdx].p2 !== null) {
-          // Both filled, no auto-advance
-        } else if (next[nextMatchIdx].p1 !== null && next[nextMatchIdx].p2 === null) {
-          // Wait for p2
-        } else if (next[nextMatchIdx].p2 !== null && next[nextMatchIdx].p1 === null) {
-          // Wait for p1
-        }
       }
     }
   }
@@ -680,12 +661,7 @@ let modalContext = null; // { type: 'se'|'rr', roundIdx, matchIdx }
 
 function openMatchModal(type, roundIdx, matchIdx) {
   const t = state.tournament;
-  let match;
-  if (type === 'se') {
-    match = t.rounds[roundIdx].matches[matchIdx];
-  } else {
-    match = t.rounds[roundIdx].matches[matchIdx];
-  }
+  const match = t.rounds[roundIdx].matches[matchIdx];
 
   if (!match.p1 && !match.p2) return;
 
@@ -701,19 +677,10 @@ function openMatchModal(type, roundIdx, matchIdx) {
   $('modal-score1').value = match.score1 !== null ? match.score1 : '';
   $('modal-score2').value = match.score2 !== null ? match.score2 : '';
 
-  // Reset winner selection
-  $('modal-win1').classList.remove('selected');
-  $('modal-win2').classList.remove('selected');
-  $('modal-team1').classList.remove('selected');
-  $('modal-team2').classList.remove('selected');
-
-  if (match.winner === match.p1) {
-    $('modal-win1').classList.add('selected');
-    $('modal-team1').classList.add('selected');
-  } else if (match.winner === match.p2) {
-    $('modal-win2').classList.add('selected');
-    $('modal-team2').classList.add('selected');
-  }
+  // Restore winner selection
+  if (match.winner === match.p1) selectWinner(1);
+  else if (match.winner === match.p2) selectWinner(2);
+  else selectWinner(0);
 
   $('match-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -733,12 +700,7 @@ function saveMatchModal() {
   const { type, roundIdx, matchIdx } = modalContext;
   const t = state.tournament;
 
-  let match;
-  if (type === 'se') {
-    match = t.rounds[roundIdx].matches[matchIdx];
-  } else {
-    match = t.rounds[roundIdx].matches[matchIdx];
-  }
+  const match = t.rounds[roundIdx].matches[matchIdx];
 
   const s1 = $('modal-score1').value !== '' ? parseInt($('modal-score1').value) : null;
   const s2 = $('modal-score2').value !== '' ? parseInt($('modal-score2').value) : null;
@@ -827,25 +789,25 @@ function saveTournament() {
   showToast('Tournament saved!');
 }
 
-function loadTournament(id) {
-  const saves = getSaves();
-  const t = saves[id];
-  if (!t) return;
-
+function applyTournament(t, toastMsg) {
   state.tournament = t;
   state.players = [...t.players];
-
-  // Restore setup UI
   $('tournament-name').value = t.name;
   document.querySelectorAll('input[name="tournament-type"]').forEach(r => {
     r.checked = r.value === t.type;
   });
-
   renderPlayerList();
   renderTournament();
   $('section-bracket').style.display = '';
   $('section-bracket').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  showToast(`Loaded: ${t.name}`);
+  showToast(toastMsg);
+}
+
+function loadTournament(id) {
+  const saves = getSaves();
+  const t = saves[id];
+  if (!t) return;
+  applyTournament(t, `Loaded: ${t.name}`);
 }
 
 function deleteTournament(id) {
@@ -883,18 +845,6 @@ function renderSavedList() {
     `;
     container.appendChild(item);
   });
-
-  container.querySelectorAll('[data-load]').forEach(btn => {
-    btn.addEventListener('click', () => loadTournament(btn.dataset.load));
-  });
-
-  container.querySelectorAll('[data-del]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (confirm('Delete this saved tournament?')) {
-        deleteTournament(btn.dataset.del);
-      }
-    });
-  });
 }
 
 /* =====================================================
@@ -924,21 +874,8 @@ function importJSON(file) {
       const t = JSON.parse(e.target.result);
       if (!t.type || !t.players || !t.rounds) throw new Error('Invalid format');
 
-      // Assign new ID to avoid collision
       t.id = t.id || generateId();
-      state.tournament = t;
-      state.players = [...t.players];
-
-      $('tournament-name').value = t.name;
-      document.querySelectorAll('input[name="tournament-type"]').forEach(r => {
-        r.checked = r.value === t.type;
-      });
-
-      renderPlayerList();
-      renderTournament();
-      $('section-bracket').style.display = '';
-      $('section-bracket').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      showToast('Tournament imported successfully!');
+      applyTournament(t, 'Tournament imported successfully!');
     } catch (err) {
       showToast('Invalid JSON file. Please check the format.');
     }
@@ -996,19 +933,10 @@ function initRRTabs() {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.rr-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      const target = tab.dataset.tab;
-      if (target === 'schedule') {
-        $('rr-schedule').style.display = '';
-        $('rr-schedule').classList.add('active');
-        $('rr-standings').style.display = 'none';
-        $('rr-standings').classList.remove('active');
-      } else {
-        $('rr-standings').style.display = '';
-        $('rr-standings').classList.add('active');
-        $('rr-schedule').style.display = 'none';
-        $('rr-schedule').classList.remove('active');
-        renderRRStandings();
-      }
+      const showSchedule = tab.dataset.tab === 'schedule';
+      $('rr-schedule').classList.toggle('active', showSchedule);
+      $('rr-standings').classList.toggle('active', !showSchedule);
+      if (!showSchedule) renderRRStandings();
     });
   });
 }
@@ -1017,7 +945,34 @@ function initRRTabs() {
    EVENT LISTENERS
    ===================================================== */
 
+// Toggle winner highlight in the modal (side: 1 or 2)
+function selectWinner(side) {
+  $('modal-win1').classList.toggle('selected', side === 1);
+  $('modal-win2').classList.toggle('selected', side === 2);
+  $('modal-team1').classList.toggle('selected', side === 1);
+  $('modal-team2').classList.toggle('selected', side === 2);
+}
+
 function initEventListeners() {
+  // Delegated: remove player buttons
+  $('player-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.player-remove');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.index);
+    state.players.splice(idx, 1);
+    renderPlayerList();
+  });
+
+  // Delegated: saved tournament load / delete buttons
+  $('saved-list').addEventListener('click', (e) => {
+    const loadBtn = e.target.closest('[data-load]');
+    if (loadBtn) { loadTournament(loadBtn.dataset.load); return; }
+    const delBtn = e.target.closest('[data-del]');
+    if (delBtn && confirm('Delete this saved tournament?')) {
+      deleteTournament(delBtn.dataset.del);
+    }
+  });
+
   // Add player
   $('btn-add-player').addEventListener('click', () => {
     const input = $('player-input');
@@ -1101,51 +1056,20 @@ function initEventListeners() {
   });
 
   // Modal winner buttons
-  $('modal-win1').addEventListener('click', () => {
-    $('modal-win1').classList.add('selected');
-    $('modal-win2').classList.remove('selected');
-    $('modal-team1').classList.add('selected');
-    $('modal-team2').classList.remove('selected');
-  });
-
-  $('modal-win2').addEventListener('click', () => {
-    $('modal-win2').classList.add('selected');
-    $('modal-win1').classList.remove('selected');
-    $('modal-team2').classList.add('selected');
-    $('modal-team1').classList.remove('selected');
-  });
+  $('modal-win1').addEventListener('click', () => selectWinner(1));
+  $('modal-win2').addEventListener('click', () => selectWinner(2));
 
   // Clicking team card selects as winner
-  $('modal-team1').addEventListener('click', () => {
-    $('modal-win1').classList.add('selected');
-    $('modal-win2').classList.remove('selected');
-    $('modal-team1').classList.add('selected');
-    $('modal-team2').classList.remove('selected');
-  });
-
-  $('modal-team2').addEventListener('click', () => {
-    $('modal-win2').classList.add('selected');
-    $('modal-win1').classList.remove('selected');
-    $('modal-team2').classList.add('selected');
-    $('modal-team1').classList.remove('selected');
-  });
+  $('modal-team1').addEventListener('click', () => selectWinner(1));
+  $('modal-team2').addEventListener('click', () => selectWinner(2));
 
   // Auto-select winner from score inputs
   function autoSelectFromScores() {
     const s1 = parseInt($('modal-score1').value);
     const s2 = parseInt($('modal-score2').value);
     if (!isNaN(s1) && !isNaN(s2)) {
-      if (s1 > s2) {
-        $('modal-win1').classList.add('selected');
-        $('modal-win2').classList.remove('selected');
-        $('modal-team1').classList.add('selected');
-        $('modal-team2').classList.remove('selected');
-      } else if (s2 > s1) {
-        $('modal-win2').classList.add('selected');
-        $('modal-win1').classList.remove('selected');
-        $('modal-team2').classList.add('selected');
-        $('modal-team1').classList.remove('selected');
-      }
+      if (s1 > s2) selectWinner(1);
+      else if (s2 > s1) selectWinner(2);
     }
   }
 
